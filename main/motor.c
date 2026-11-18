@@ -3,6 +3,7 @@
  * IN1~IN4 控方向, ENA/ENB 走 PWM 开环调速
  */
 
+#include <stdio.h>
 #include "motor.h"
 #include "driver/gpio.h"
 #include "driver/ledc.h"
@@ -89,12 +90,14 @@ void car_stop(void)
 {
     motor_left(1, 0);
     motor_right(1, 0);
+    printf("zuo = %d; you = %d;\n", 0, 0);
 }
 
 void car_forward(void)
 {
     motor_left(1, SPEED_BASE);
     motor_right(1, SPEED_BASE);
+    printf("zuo = %d; you = %d;\n", SPEED_BASE, SPEED_BASE);
 }
 
 /* 差速前进: duty_l / duty_r 分别为左右轮占空比 */
@@ -102,6 +105,7 @@ void car_diff(uint32_t duty_l, uint32_t duty_r)
 {
     motor_left(1, duty_l);
     motor_right(1, duty_r);
+    printf("zuo = %u; you = %u;\n", duty_l, duty_r);
 }
 
 /* 右转: 左轮正转, 右轮反转(原地右转), 避障用 */
@@ -109,4 +113,5 @@ void car_turn_right(void)
 {
     motor_left(1, SPEED_AVOID);
     motor_right(0, SPEED_AVOID);
+    printf("zuo = %d; you = %d;\n", SPEED_AVOID, SPEED_AVOID);
 }
