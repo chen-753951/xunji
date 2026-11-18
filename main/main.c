@@ -21,7 +21,7 @@
 #define OBSTACLE_DIST_CM    10.0f
 
 /* 控制周期 */
-#define CTRL_PERIOD_MS      20
+#define CTRL_PERIOD_MS      10
 
 /* ========================= 状态机 ========================= */
 typedef enum {
@@ -32,8 +32,8 @@ typedef enum {
 static car_mode_t s_mode = MODE_TRACK;
 
 /* ========================= 权重式循迹参数 ========================= */
-#define STEER_GAIN     60      /* 权重 -> 占空比换算系数 */
-#define STEER_MAX      3       /* 偏差限幅, 决定最大转弯力度 */
+#define STEER_GAIN     110      /* 权重 -> 占空比换算系数 */
+#define STEER_MAX      4       /* 偏差限幅, 决定最大转弯力度 */
 
 /*
  * 权重表: IR1~IR4 从左到右的位置权重
@@ -41,7 +41,7 @@ static car_mode_t s_mode = MODE_TRACK;
  * 离中间越远权重越大 -> 偏离越远转弯力度越大
  * 想改成别的力度组合只改这张表即可
  */
-static const int8_t ir_weight[4] = {-3, -1, 1, 3};   /* IR1 最左 ~ IR4 最右 */
+static const int8_t ir_weight[4] = {-3, -2, 2, 3};   /* IR1 最左 ~ IR4 最右 */
 
 /* ================================================================== */
 /*                             循迹逻辑                                */
@@ -63,14 +63,15 @@ static void track_control(void)
     static int last_error = 0;      /* 全丢线时沿用上次的偏差去找线 */
     int s = ir_read_all();
 
-    /* 全丢线: 沿用上次偏差方向找回黑线; 全压线(直角/宽线): 直行 */
-    if (s == 0b0000) {
-        s = 0;
-    } else if (s == 0b1111) {
+    /* 全压线(直角/宽线): 直行; 全丢线的情况在下面用 last_error 处理 */
+    if (s == 0b1111) {
         car_forward();
         return;
     }
-
+    if (s == 0b0000) {
+        car_forward();
+        return;
+    }
     /* 加权求偏差 */
     int error = 0;
     if (s & 0x8) error += ir_weight[0];     /* IR1 最左 */
@@ -94,7 +95,7 @@ static void track_control(void)
     if (duty_l > 1023) duty_l = 1023;
     if (duty_r > 1023) duty_r = 1023;
 
-    car_diff(duty_l, duty_r);
+    car_diff(duty_r, duty_l);
 }
 
 /* ================================================================== */

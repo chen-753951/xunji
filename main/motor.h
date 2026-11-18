@@ -25,8 +25,7 @@
 #define LEDC_CH_RIGHT     1                    /* 右电机通道 */
 
 /* 速度参数 (开环, 按车况调整) */
-#define SPEED_BASE     550     /* 直行基础占空比 0~1023 */
-#define SPEED_TURN     800     /* 转弯时内侧轮(慢)占空比 */
+#define SPEED_BASE     300     /* 直行基础占空比 0~1023 */
 #define SPEED_AVOID    550     /* 避障右转速度 */
 
 /* 初始化 PWM 和方向引脚 */
