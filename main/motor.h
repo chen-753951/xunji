@@ -25,7 +25,7 @@
 #define LEDC_CH_RIGHT     1                    /* 右电机通道 */
 
 /* 速度参数 (开环, 按车况调整) */
-#define SPEED_BASE     300     /* 直行基础占空比 0~1023 */
+#define SPEED_AVG      300    /* 平均速度: 直行速度/原地转基准占空比 0~1023 */
 #define SPEED_AVOID    550     /* 避障右转速度 */
 
 /* 初始化 PWM 和方向引脚 */
@@ -38,7 +38,7 @@ void motor_right(int dir, uint32_t duty);
 /* 整车动作 */
 void car_stop(void);
 void car_forward(void);
-void car_diff(uint32_t duty_l, uint32_t duty_r);    /* 差速前进 */
+void car_drive(int duty_l, int duty_r);             /* 带符号差速: >0正转 <0反转 =0停 */
 void car_turn_right(void);                          /* 原地右转(避障用) */
 
 #endif
