@@ -3,6 +3,7 @@
  * IN1~IN4 控方向, ENA/ENB 走 PWM 开环调速
  */
 
+#include <stdio.h>
 #include "motor.h"
 #include <stdio.h>
 #include "driver/gpio.h"
@@ -96,11 +97,16 @@ void car_stop(void)
 {
     motor_left(1, 0);
     motor_right(1, 0);
+<<<<<<< HEAD
     pwm_debug("stop", 0, 0);
+=======
+    printf("zuo = %d; you = %d;\n", 0, 0);
+>>>>>>> 821c9e22dda14798385e2f4f26789e5055c4c751
 }
 
 void car_forward(void)
 {
+<<<<<<< HEAD
     motor_left(1, SPEED_AVG);
     motor_right(1, SPEED_AVG);
     pwm_debug("straight", SPEED_AVG, SPEED_AVG);
@@ -112,6 +118,19 @@ void car_drive(int duty_l, int duty_r)
     motor_left(duty_l >= 0 ? 1 : 0, (uint32_t)(duty_l >= 0 ? duty_l : -duty_l));
     motor_right(duty_r >= 0 ? 1 : 0, (uint32_t)(duty_r >= 0 ? duty_r : -duty_r));
     pwm_debug("drive", duty_l, duty_r);
+=======
+    motor_left(1, SPEED_BASE);
+    motor_right(1, SPEED_BASE);
+    printf("zuo = %d; you = %d;\n", SPEED_BASE, SPEED_BASE);
+}
+
+/* 差速前进: duty_l / duty_r 分别为左右轮占空比 */
+void car_diff(uint32_t duty_l, uint32_t duty_r)
+{
+    motor_left(1, duty_l);
+    motor_right(1, duty_r);
+    printf("zuo = %u; you = %u;\n", duty_l, duty_r);
+>>>>>>> 821c9e22dda14798385e2f4f26789e5055c4c751
 }
 
 /* 右转: 左轮正转, 右轮反转(原地右转), 避障用 */
@@ -119,5 +138,9 @@ void car_turn_right(void)
 {
     motor_left(1, SPEED_AVOID);
     motor_right(0, SPEED_AVOID);
+<<<<<<< HEAD
     pwm_debug("avoid", SPEED_AVOID, -SPEED_AVOID);
+=======
+    printf("zuo = %d; you = %d;\n", SPEED_AVOID, SPEED_AVOID);
+>>>>>>> 821c9e22dda14798385e2f4f26789e5055c4c751
 }
