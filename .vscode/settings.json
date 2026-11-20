@@ -34,5 +34,8 @@
     "--compile-commands-dir=c:\\Users\\31321\\xunji\\build"
   ],
   "python.analysis.stubPath": "C:\\Users\\31321\\.kendryte\\k230_canmv_pylance\\734036805e5c28d5\\typings",
-  "idf.flashType": "UART"
+  "idf.flashType": "UART",
+  "python.analysis.extraPaths": [
+    "C:\\Users\\31321\\.kendryte\\k230_canmv_stubs\\ef72564650b53101827b5750b76d115dd3b5e36d"
+  ]
 }
