@@ -20,6 +20,7 @@
 #include "esp_timer.h"
 #include "motor.h"
 #include "sensor.h"
+#include "duoji.h"
 
 /* 避障距离阈值 */
 #define OBSTACLE_DIST_CM    25.0f
@@ -236,6 +237,13 @@ static void car_task(void *arg)
     float dist;
 
     while (1) {
+        /* 遥控模式: 手机首次连上后永久锁定, 断联只停车等待重连,
+         * 循迹+避障自动逻辑永久失效 */
+        if (duoji_is_remote()) {
+            vTaskDelay(pdMS_TO_TICKS(CTRL_PERIOD_MS));
+            continue;
+        }
+
         /* 每个控制周期测一次距离 */
         dist = ultrasonic_get_distance();
 
@@ -308,6 +316,7 @@ void app_main(void)
 {
     motor_init();
     sensor_init();
+    duoji_init();
     car_stop();
     printf("car ready, start tracking\n");
 
