@@ -13,7 +13,7 @@
 #define PIN_SERVO   17      /* 舵机 */
 
 /* WiFi 热点配置 */
-#define AP_SSID     "xunji-car"
+#define AP_SSID     "Handsome xjh"
 #define AP_PASS     "12345678"
 
 /* TCP 服务器端口 */
