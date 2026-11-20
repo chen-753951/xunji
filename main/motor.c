@@ -4,7 +4,6 @@
  */
 
 #include "motor.h"
-#include <stdio.h>
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 
@@ -86,24 +85,16 @@ void motor_right(int dir, uint32_t duty)
     ledc_update_duty(LEDC_MODE, LEDC_CH_RIGHT);
 }
 
-/* 调试打印: 左右轮实际发给硬件的 PWM, 正数=正转 负数=反转 0=停止 */
-static void pwm_debug(const char *tag, int duty_l, int duty_r)
-{
-    printf("pwm [%-8s] L=%+d R=%+d\n", tag, duty_l, duty_r);
-}
-
 void car_stop(void)
 {
     motor_left(1, 0);
     motor_right(1, 0);
-    pwm_debug("stop", 0, 0);
 }
 
 void car_forward(void)
 {
     motor_left(1, SPEED_AVG);
     motor_right(1, SPEED_AVG);
-    pwm_debug("straight", SPEED_AVG, SPEED_AVG);
 }
 
 /* 带符号差速: duty>0 正转, <0 反转, =0 停止(滑行); 绝对值为 PWM 占空比 */
@@ -111,7 +102,6 @@ void car_drive(int duty_l, int duty_r)
 {                   //方向                      +               速度
     motor_left(duty_l >= 0 ? 1 : 0, (uint32_t)(duty_l >= 0 ? duty_l : -duty_l));
     motor_right(duty_r >= 0 ? 1 : 0, (uint32_t)(duty_r >= 0 ? duty_r : -duty_r));
-    pwm_debug("drive", duty_l, duty_r);
 }
 
 /* 右转: 左轮正转, 右轮反转(原地右转), 避障用 */
@@ -119,5 +109,4 @@ void car_turn_right(void)
 {
     motor_left(1, SPEED_AVOID);
     motor_right(0, SPEED_AVOID);
-    pwm_debug("avoid", SPEED_AVOID, -SPEED_AVOID);
 }

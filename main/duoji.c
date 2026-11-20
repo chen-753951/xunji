@@ -214,6 +214,7 @@ static void duoji_task(void *arg)
         }
         printf("phone connected, enter remote mode\n");
         s_remote_mode = true;
+        car_stop();   /* 连上后立刻停车，防止沿用自动模式最后一拍 PWM */
 
         /* 1s 接收超时, 便于及时检测断连 */
         struct timeval tv = { .tv_sec = 1, .tv_usec = 0 };
@@ -260,7 +261,7 @@ void duoji_init(void)
 {
     servo_init();
     wifi_ap_init();
-    xTaskCreate(duoji_task, "duoji_task", 4096, NULL, 5, NULL);
+    xTaskCreate(duoji_task, "duoji_task", 8192, NULL, 5, NULL);
 }
 
 bool duoji_is_remote(void)
