@@ -42,9 +42,9 @@ static int s_first_back = 1;
 
 /* ========================= 避障参数 ========================= */
 #define AVOID_SPEED          600     /* 避障原地转速度: 两轮等速反向 */
-#define FIRST_TURN_LEFT_MS   2000    /* 首次避障: 原地左转时长 */
-#define AVOID_TURN_RIGHT_MS  1000    /* 后续避障: 每次原地右转时长 */
-#define REALIGN_TURN_MS      1500    /* 首次避障->循迹: 原地左转对线时长 */
+#define FIRST_TURN_LEFT_MS   700    /* 首次避障: 原地左转时长 */
+#define AVOID_TURN_RIGHT_MS  500    /* 后续避障: 每次原地右转时长 */
+#define REALIGN_TURN_MS      700    /* 首次避障->循迹: 原地左转对线时长 */
 
 /* 原地左转: 左轮反转, 右轮正转; 原地右转相反. 两轮速度相同 */
 static void car_pivot_left(int duty)  { car_drive(-duty, duty); }
