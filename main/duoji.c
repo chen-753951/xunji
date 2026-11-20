@@ -92,13 +92,16 @@ static void wifi_ap_init(void)
     }
     ESP_ERROR_CHECK(ret);
 
-    ESP_ERROR_CHECK(esp_netif_init());
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    //初始化网络接口
+    ESP_ERROR_CHECK(esp_netif_init());//初始化 TCP/IP 网络抽象层
+    ESP_ERROR_CHECK(esp_event_loop_create_default());//创建事件循环，WiFi 的“连上/断开”等事件都通过它分发。
     esp_netif_create_default_wifi_ap();     /* AP 默认 IP 192.168.4.1 */
 
+    // 初始化 WiFi 驱动
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+    // 配置 WiFi AP 参数
     wifi_config_t wifi_config = {
         .ap = {
             .max_connection = 1,             /* 一次只连一个手机 */
