@@ -1,5 +1,5 @@
 /*
- * 遥控模块 (duoji.c): WiFi AP + TCP 服务器 + 2 路舵机
+ * 遥控模块 (duoji.c): WiFi AP + TCP 服务器 + 1 路舵机
  *
  *  - 舵机: LEDC 50Hz PWM (timer1, 14bit), 0.5~2.5ms 脉宽对应 0~180 度
  *  - WiFi: ESP32 开热点(AP), 手机连上后通过 TCP 发文本指令控制
@@ -8,8 +8,8 @@
  * 指令协议 (每条一行, 可带 \n 或 \r\n 结尾):
  *   F 前进  B 后退  L 原地左转  R 原地右转  S 停止
  *   M <L> <R>   直接给左右轮占空比 (-1023~1023)
- *   A <deg>     抬臂舵机角度 (0~180)
- *   G <deg>     爪舵机角度   (0~180)
+ *   A <deg>     舵机角度 (0~180)
+ *   G <deg>     舵机角度 (0~180, 与 A 等效)
  */
 
 #include <stdio.h>
@@ -26,11 +26,10 @@
 #include "duoji.h"
 #include "motor.h"
 
-/* 舵机 PWM 配置: 电机已占 timer0/ch0,1, 舵机用 timer1/ch2,3 */
+/* 舵机 PWM 配置: 电机已占 timer0/ch0,1, 舵机用 timer1/ch2 */
 #define SERVO_LEDC_MODE    LEDC_LOW_SPEED_MODE
 #define SERVO_LEDC_TIMER   LEDC_TIMER_1
-#define SERVO_CH_ARM       LEDC_CHANNEL_2
-#define SERVO_CH_CLAW      LEDC_CHANNEL_3
+#define SERVO_CH           LEDC_CHANNEL_2
 
 /* 50Hz(20ms)下 14bit(0~16383): 0.5ms 脉宽=410, 2.5ms 脉宽=2048 */
 #define SERVO_DUTY_MIN     410
@@ -56,34 +55,28 @@ static void servo_init(void)
     };
     ledc_timer_config(&timer);
 
-    const ledc_channel_t chs[2]  = { SERVO_CH_ARM, SERVO_CH_CLAW };
-    const int           pins[2]  = { PIN_SERVO_ARM, PIN_SERVO_CLAW };
-    for (int i = 0; i < 2; i++) {
-        ledc_channel_config_t ch = {
-            .speed_mode = SERVO_LEDC_MODE,
-            .channel    = chs[i],
-            .timer_sel  = SERVO_LEDC_TIMER,
-            .gpio_num   = pins[i],
-            .duty       = 0,
-            .hpoint     = 0,
-        };
-        ledc_channel_config(&ch);
-    }
+    ledc_channel_config_t ch = {
+        .speed_mode = SERVO_LEDC_MODE,
+        .channel    = SERVO_CH,
+        .timer_sel  = SERVO_LEDC_TIMER,
+        .gpio_num   = PIN_SERVO,
+        .duty       = 0,
+        .hpoint     = 0,
+    };
+    ledc_channel_config(&ch);
 
     /* 上电默认中位角, 避免舵机猛地打到极限 */
-    duoji_set_servo(SERVO_ARM, 90);
-    duoji_set_servo(SERVO_CLAW, 90);
+    duoji_set_servo(90);
 }
 
-void duoji_set_servo(int servo_id, int angle)
+void duoji_set_servo(int angle)
 {
     if (angle < 0)   angle = 0;
     if (angle > 180) angle = 180;
 
-    ledc_channel_t ch = (servo_id == SERVO_ARM) ? SERVO_CH_ARM : SERVO_CH_CLAW;
     uint32_t duty = SERVO_DUTY_MIN + (SERVO_DUTY_MAX - SERVO_DUTY_MIN) * angle / 180;
-    ledc_set_duty(SERVO_LEDC_MODE, ch, duty);
-    ledc_update_duty(SERVO_LEDC_MODE, ch);
+    ledc_set_duty(SERVO_LEDC_MODE, SERVO_CH, duty);
+    ledc_update_duty(SERVO_LEDC_MODE, SERVO_CH);
 }
 
 /* ================================================================== */
@@ -161,12 +154,12 @@ static void handle_command(const char *line)
         break;
     case 'A': case 'a':
         if (sscanf(line, "A %d", &a) == 1 || sscanf(line, "a %d", &a) == 1) {
-            duoji_set_servo(SERVO_ARM, a);
+            duoji_set_servo(a);
         }
         break;
     case 'G': case 'g':
         if (sscanf(line, "G %d", &a) == 1 || sscanf(line, "g %d", &a) == 1) {
-            duoji_set_servo(SERVO_CLAW, a);
+            duoji_set_servo(a);
         }
         break;
     default:

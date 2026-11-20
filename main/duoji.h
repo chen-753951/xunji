@@ -4,18 +4,13 @@
 #include <stdbool.h>
 
 /*
- * 遥控模块 (duoji): WiFi AP + TCP 服务器 + 2 路舵机(PWM)
+ * 遥控模块 (duoji): WiFi AP + TCP 服务器 + 1 路舵机(PWM)
  *  - 手机连热点后通过 TCP 发指令, 控制小车移动 + 舵机抓取
  *  - 遥控期间 main.c 的循迹/避障自动逻辑失效
  */
 
 /* 舵机引脚 (可按实际接线修改) */
-#define PIN_SERVO_ARM   17      /* 抬臂舵机 */
-#define PIN_SERVO_CLAW  18      /* 抓取爪舵机 */
-
-/* 舵机编号 */
-#define SERVO_ARM   0
-#define SERVO_CLAW  1
+#define PIN_SERVO   17      /* 舵机 */
 
 /* WiFi 热点配置 */
 #define AP_SSID     "xunji-car"
@@ -33,7 +28,7 @@ void duoji_init(void);
 /* 是否处于遥控模式 (手机首次连上后永久锁定, 断联只停车等重连) */
 bool duoji_is_remote(void);
 
-/* 设置舵机角度: servo_id = SERVO_ARM/SERVO_CLAW, angle 0~180 */
-void duoji_set_servo(int servo_id, int angle);
+/* 设置舵机角度: angle 0~180 */
+void duoji_set_servo(int angle);
 
 #endif
