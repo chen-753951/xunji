@@ -113,11 +113,3 @@ void car_drive(int duty_l, int duty_r)
     motor_right(duty_r >= 0 ? 1 : 0, (uint32_t)(duty_r >= 0 ? duty_r : -duty_r));
     pwm_debug("drive", duty_l, duty_r);
 }
-
-/* 右转: 左轮正转, 右轮反转(原地右转), 避障用 */
-void car_turn_right(void)
-{
-    motor_left(1, SPEED_AVOID);
-    motor_right(0, SPEED_AVOID);
-    pwm_debug("avoid", SPEED_AVOID, -SPEED_AVOID);
-}

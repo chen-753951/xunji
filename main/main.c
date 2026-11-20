@@ -7,11 +7,11 @@
  *
  * 状态机:
  *  - 循迹态: 距离 >= 10cm, 按红外状态巡线; 距离 < 10cm 进避障态
- *  - 避障态: 第一次识别到障碍置标志位并原地左转2s(600);
- *            之后遇到障碍只原地右转, 每次1s(600);
- *            无障碍时按循迹速度直行;
- *            IR2/IR3 任意一个压到黑线才回循迹态,
- *            首次回循迹先原地左转1.5s(600)对准线
+ *  - 避障态: 第一次识别到障碍置标志位并原地左转(FIRST_TURN_LEFT_MS);
+ *            之后再遇到障碍一律原地右转(AVOID_TURN_RIGHT_MS);
+ *            无障碍时按循迹速度直行找线;
+ *            IR2/IR3 出现 0->1 跳变(重新压到黑线)时:
+ *            先制动消惯性, 再原地左转(REALIGN_TURN_MS)对线, 切回循迹态
  */
 
 #include <stdio.h>
@@ -22,7 +22,7 @@
 #include "sensor.h"
 
 /* 避障距离阈值 */
-#define OBSTACLE_DIST_CM    10.0f
+#define OBSTACLE_DIST_CM    25.0f
 
 /* 控制周期 */
 #define CTRL_PERIOD_MS      10
@@ -37,14 +37,22 @@ static car_mode_t s_mode = MODE_TRACK;
 
 /* 避障标志: 第一次识别到障碍置1, 之后避障只右转 */
 static int s_avoid_flag = 0;
-/* 首次从避障态回循迹态: 先左转1.5s对线 */
-static int s_first_back = 1;
+/* 避障态 IR2/IR3 上一拍状态(只看 bit2/bit1): 用来检测 0->1 跳变 */
+static int s_avoid_last_mid = 0;
 
 /* ========================= 避障参数 ========================= */
-#define AVOID_SPEED          600     /* 避障原地转速度: 两轮等速反向 */
-#define FIRST_TURN_LEFT_MS   700    /* 首次避障: 原地左转时长 */
-#define AVOID_TURN_RIGHT_MS  500    /* 后续避障: 每次原地右转时长 */
-#define REALIGN_TURN_MS      700    /* 首次避障->循迹: 原地左转对线时长 */
+#define AVOID_SPEED          365     /* 首次避障转身速度 */
+#define AVOID_TURN_SPEED     700     /* 后续避障右转/对线转身速度: 两轮正负600 */
+#define FIRST_TURN_LEFT_MS   450    /* 首次避障: 原地左转时长 */
+#define AVOID_TURN_RIGHT_MS  200    /* 后续避障: 每次原地右转时长 */
+
+/* 避障动作统一先制动消惯性再转身/对线 (力度独立于循迹态刹车) */
+#define AVOID_BRAKE_MS       300    /* 避障转身前制动时长 */
+#define AVOID_BRAKE_DUTY     (-150)  /* 避障转身前制动占空比 */
+
+/* 避障->循迹 对线: IR2/IR3 跳变瞬间先制动消惯性,
+ * 再一律原地左转对线, 完成后切回循迹 */
+#define REALIGN_TURN_MS      500    /* 对线左转时长 */
 
 /* 原地左转: 左轮反转, 右轮正转; 原地右转相反. 两轮速度相同 */
 static void car_pivot_left(int duty)  { car_drive(-duty, duty); }
@@ -52,14 +60,14 @@ static void car_pivot_right(int duty) { car_drive(duty, -duty); }
 
 /* ========================= 权重式循迹参数 ========================= */
 #define STEER_GAIN     120      /* 权重 -> 占空比换算系数 */
-#define STEER_MAX      4       /* 偏差限幅, 决定最大转弯力度 */
+#define STEER_MAX      3       /* 偏差限幅, 决定最大转弯力度 */
 
 /* 消惯性刹车: 只有最外侧探头 IR1(最左)/IR4(最右) 的信号发生跳变
  * (压到线或离开线)时, 两轮才以 BRAKE_DUTY 反转保持 BRAKE_TIME_MS 消惯性,
  * 非阻塞. IR2/IR3 的信号变化不刹车, 直接按加权循迹处理.
  * 刹车期间持续刷新信号基线, 刹完不会连环刹车 */
 #define BRAKE_DUTY      (-300)   /* 刹车占空比: 反转制动 */
-#define BRAKE_TIME_MS   400     /* 刹车保持时长 */
+#define BRAKE_TIME_MS   200     /* 刹车保持时长 */
 
 static int64_t s_brake_until_us = 0;    /* 刹车截止时刻(us), 0=空闲 */
 static int s_last_s = -1;               /* 上一拍红外信号, -1=上电首拍不刹车 */
@@ -72,7 +80,7 @@ static int s_pivot_hold = 0;            /* 1=按记录偏差持续原地转中, 
  * 离中间越远权重越大 -> 偏离越远转弯力度越大
  * 想改成别的力度组合只改这张表即可
  */
-static const int8_t ir_weight[4] = {4, 2, -2, -4};   /* IR1 最左 ~ IR4 最右 */
+static const int8_t ir_weight[4] = {3, 2, -2, -3};   /* IR1 最左 ~ IR4 最右 */
 
 /* 按偏差原地转: error>0 右转, error<0 左转, error=0 两轮同速直行 */
 static void pivot_by_error(int error)
@@ -101,6 +109,19 @@ static void pivot_by_error(int error)
     if (duty_r < -1023) duty_r = -1023;
 
     car_drive(duty_l, duty_r);
+}
+
+/* 求红外状态 s 的加权偏差并限幅: 线偏左<0, 偏右>0 (对线/循迹共用权重表) */
+static int error_of(int s)
+{
+    int err = 0;
+    if (s & 0x8) err += ir_weight[0];   /* IR1 最左 */
+    if (s & 0x4) err += ir_weight[1];   /* IR2 中左 */
+    if (s & 0x2) err += ir_weight[2];   /* IR3 中右 */
+    if (s & 0x1) err += ir_weight[3];   /* IR4 最右 */
+    if (err > STEER_MAX) err = STEER_MAX;
+    if (err < -STEER_MAX) err = -STEER_MAX;
+    return err;
 }
 
 /* ================================================================== */
@@ -219,32 +240,44 @@ static void car_task(void *arg)
         dist = ultrasonic_get_distance();
 
         if (s_mode == MODE_AVOID) {
-            /* IR2/IR3 任意一个压到黑线 -> 避障结束 */
             int s = ir_read_all();
-            if (s & 0b0110) {
-                printf("avoid -> track\n");
-                if (s_first_back) {
-                    /* 首次从避障回循迹: 先原地左转1.5s对准线 */
-                    s_first_back = 0;
-                    printf("realign: pivot left %dms\n", REALIGN_TURN_MS);
-                    car_pivot_left(AVOID_SPEED);
-                    vTaskDelay(pdMS_TO_TICKS(REALIGN_TURN_MS));
-                }
-                s_mode = MODE_TRACK;
-                /* 清掉刹车残留, 回循迹后立刻正常采样 */
-                s_brake_until_us = 0;
-                continue;
-            }
+            int mid = s & 0b0110;
 
-            if (dist < OBSTACLE_DIST_CM) {
-                /* 后续避障: 只右转, 每次1s */
-                printf("avoiding, dist=%.1fcm, pivot right %dms\n",
-                       dist, AVOID_TURN_RIGHT_MS);
-                car_pivot_right(AVOID_SPEED);
-                vTaskDelay(pdMS_TO_TICKS(AVOID_TURN_RIGHT_MS));
+            /* 基线统一在此更新: 跳变检测用的上一拍值先存下来 */
+            int mid_prev = s_avoid_last_mid;
+            s_avoid_last_mid = mid;
+
+            if (mid && !mid_prev) {
+                /* IR2/IR3 的 0->1 跳变 = 重新压到黑线:
+                 * 先制动消惯性, 再一律原地左转对线, 完成后回循迹 */
+                printf("line jump (IR2/3 0->1, err=%d): brake %dms\n",
+                       error_of(s), AVOID_BRAKE_MS);
+                car_drive(AVOID_BRAKE_DUTY, AVOID_BRAKE_DUTY);
+                vTaskDelay(pdMS_TO_TICKS(AVOID_BRAKE_MS));
+                
+                car_pivot_right(700);
+                vTaskDelay(pdMS_TO_TICKS(250));
+                s_mode = MODE_TRACK;
+                /* 清掉循迹态刹车/原地转残留, 回循迹后重新采样 */
+                s_brake_until_us = 0;
+                s_pivot_hold = 0;
+                s_last_s = -1;
             } else {
-                /* 无障碍: 按循迹速度直行 */
-                car_forward();
+                if (dist < OBSTACLE_DIST_CM) {
+                    /* 后续遇到障碍: 先制动消惯性, 再原地右转一段再找路 */
+                    printf("avoiding, dist=%.1fcm: brake %dms\n",
+                           dist, AVOID_BRAKE_MS);
+                    car_drive(AVOID_BRAKE_DUTY, AVOID_BRAKE_DUTY);
+                    vTaskDelay(pdMS_TO_TICKS(AVOID_BRAKE_MS));
+                    printf("avoiding: pivot %dms\n", AVOID_TURN_RIGHT_MS);
+                    car_pivot_left(AVOID_TURN_SPEED);
+                    vTaskDelay(pdMS_TO_TICKS(AVOID_TURN_RIGHT_MS));
+                    /* 转身过程不采样, 以转完后的信号作为新基线, 防止误判跳变 */
+                    s_avoid_last_mid = ir_read_all() & 0b0110;
+                } else {
+                    /* 无障碍: 按循迹速度直行找线 */
+                    car_forward();
+                }
             }
         } else {
             /* 循迹状态: 距离 < 10cm 时无论在不在黑线上都进入避障 */
@@ -252,17 +285,16 @@ static void car_task(void *arg)
                 s_mode = MODE_AVOID;
                 printf("obstacle %.1fcm -> avoid mode\n", dist);
                 if (!s_avoid_flag) {
-                    /* 第一次识别到障碍: 置标志位1, 先原地左转2s */
+                    /* 第一次识别到障碍: 置标志位1, 原地左转 */
                     s_avoid_flag = 1;
                     printf("first obstacle: pivot left %dms\n", FIRST_TURN_LEFT_MS);
-                    car_pivot_left(AVOID_SPEED);
-                    vTaskDelay(pdMS_TO_TICKS(FIRST_TURN_LEFT_MS));
-                } else {
-                    /* 之前避障过: 右转1s */
-                    printf("avoid: pivot right %dms\n", AVOID_TURN_RIGHT_MS);
                     car_pivot_right(AVOID_SPEED);
-                    vTaskDelay(pdMS_TO_TICKS(AVOID_TURN_RIGHT_MS));
+                    vTaskDelay(pdMS_TO_TICKS(FIRST_TURN_LEFT_MS));
                 }
+                /* 后续避障不在这里转, 由避障态下一周期统一右转,
+                 * 否则会和避障态的右转连转两次 */
+                /* 转身后刷新基线, 转身造成的信号变化不算"重新找到线" */
+                s_avoid_last_mid = ir_read_all() & 0b0110;
             } else {
                 track_control();
             }
